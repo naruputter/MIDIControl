@@ -3,7 +3,7 @@ from MIDIManagement import *
 def midi_info():
 
 	midi_info = MIDIInfo(filePath='file/midi.mid')
-	# print(midi_info.midi_tracks)
+	print(midi_info.midi_tracks)
 	# print(midi_info.midi_info)
 	# print(midi_info.message_list(byte=True))
 	# print(midi_info.meta_message_list())
@@ -44,5 +44,5 @@ def midi_receive():
 if __name__ == '__main__':
 	
 	midi_info()
-	midi_write()
-	midi_receive()
+	# midi_write()
+	# midi_receive()

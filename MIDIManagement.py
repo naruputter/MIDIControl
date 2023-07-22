@@ -133,12 +133,6 @@ class MIDIWrite : # Create MIDI Tracks Or Set And Use MidiSet To Save File
 		elif Tracks is None :
 			self.midi_tracks = mido.MidiTrack() 
 
-
-	def tracks(self): # Get Only Tracks Information ( Mido Format )
-
-		return self.midi_tracks
-
-
 	def add_message(self, status=None, note=None, control=None, velocity=None, value=None, time=None, message=None): 
 
 		# Add Message To Mido Tracks 1. Add By Parameter 2. Add Mido Message ( message )
@@ -197,11 +191,12 @@ class MIDIReceive: # Receive Midi Message From MIDIController Real-Time For Crea
 
 		return f' {self.port_name} connect ! '
 
-	def receive_running(self, save_path=None): # Receive Midi Real-Time
+	def receive_running(self): # Receive Midi Real-Time
 
 		start_running_time = time.time()
 
 		try:
+
 			for message in self.input_port:
 
 				try :
@@ -227,8 +222,10 @@ class MIDIReceive: # Receive Midi Message From MIDIController Real-Time For Crea
 		return self.midi_tracks
 
 	def save_midi_file(self, path): # Save Midi Set To .mid Or midi. File
-
+		print('save')
+		print(self.midi_tracks)
 		self.midi_set.tracks.append(self.midi_tracks)
+		print(self.midi_set)
 		self.midi_set.save(path)
 
 
