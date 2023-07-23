@@ -37,12 +37,12 @@ def midi_receive():
 	# print(midi_receive.get_input_port())
 	# print(midi_receive.set_input_port('putter Bus 1'))
 	# print(midi_receive.port_name)
-	# print(midi_receive.receive_running())
+	print(midi_receive.receive_running())
 
 
 
 if __name__ == '__main__':
 	
-	midi_info()
+	# midi_info()
 	# midi_write()
-	# midi_receive()
+	midi_receive()

@@ -1,5 +1,7 @@
 import mido
+import rtmidi
 import matplotlib.pyplot as plt
+import time
 
 
 class MIDI :
@@ -19,10 +21,76 @@ class MIDI :
 		self.tick = tick
 		self.bpm = bpm
 
+	def get_input_port(self):
+
+		available_ports = midi_in.get_ports()
 
 
+	def realtime_running(self):
 
-### Manage Function #########
+		first_received = False
+
+		midi_in = rtmidi.MidiIn()
+		available_ports = midi_in.get_ports()
+
+		if available_ports:
+
+			midi_pack = receive_midi_realtime(port=0)
+
+			return midi_pack
+
+		else:
+			print("No MIDI input ports found.")
+
+
+### Realtime #####################
+
+def receive_midi_realtime(port=0):
+
+	### !!! all receive note is note_on !!! ####
+
+	midi_pack = []
+
+	first_received = False
+	midi_in = rtmidi.MidiIn()
+
+	midi_in.open_port(port)
+	start_timestamp = time.time() 
+
+	while True:
+			
+		rtmidi_message = midi_in.get_message()
+
+		if rtmidi_message:
+
+			receive_timstamp = time.time() 
+			midi_value = rtmidi_message[0]
+
+			if first_received :
+
+				midi_value.append(rtmidi_message[1])
+
+			else :
+
+				first_note_time = receive_timstamp - start_timestamp
+				midi_value.append( first_note_time )
+
+				first_received = True
+
+			midi_pack.append(midi_value)
+
+			if midi_value[1] == 21 :
+
+				break
+
+		time.sleep(0.01)
+
+	print(midi_pack)
+
+	return midi_pack
+
+
+### Manage MIDI Function #########
 
 
 def read_midi_file(filePath):
@@ -129,9 +197,12 @@ def convert_mido_pack_to_midi_pack(midoPack):
 	
 if __name__ == '__main__':
 	
-	midi = MIDI(filePath='test.mid')
+	midi = MIDI()
 
-	print(midi.midi_pack)
+	midi_pack = midi.realtime_running()
 
-	print(convert_midi_pack_to_mido_pack(midi.midi_pack))
+	print(convert_midi_pack_to_mido_pack(midi_pack))
+	# save_midi_file(midi_pack, 'cannon.mid')
+
+	# receive_midi_realtime()
 
