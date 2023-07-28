@@ -1,231 +1,303 @@
-import rtmidi
 import mido
+import rtmidi
+import matplotlib.pyplot as plt
 import time
-import os
-import json
-import numpy as np
+from tools import Metronome
 
+''' 
 
+##############################################################
+#### Information #############################################
+##############################################################
 
-NOTE_PER_12 = { 0:'C', 1:'C#', 2:'D', 3:'Eb', 4:'E', 5:'F',	6:'F#',	7:'G',	8:'Ab',	9:'A', 10:'Bb', 11:'B' }
-NOTE_NAME_LIST = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
+# MIDI Pack Format
 
+	1. Normal Format
+		- MIDI Data : [status, value, velocity, time]
+		- MIDI Pack : [[status, value, velocity, time], [...]]
 
+	2. Mido Format 
+		- MIDI Data : Message('note_on', channel=0, note=64, velocity=42, time=396)
+		- MIDI Pack : MidiFile(type=1, ticks_per_beat=480, tracks=[
+								MidiTrack([
+									Message('note_on', channel=0, note=64, velocity=42, time=396),
+									Message('note_on', channel=0, note=62, velocity=47, time=9)
+								])
 
-def list_to_json_count(data_list): # Count Duplicate Value In List By Convert To JSON Format
+# Function Include 
 
-	json_count = {}
+	1. read MIDI File
+		- read_midi_file(filePath)
+		- <class:MIDI>(filePath)
 
-	for data in data_list :
-		json_count[data] = 0
+	2. write MIDI File
+		- <class:MIDI> add_midi_data(midiData)
 
-	return json_count
+	3. receive Realtime MIDI 
+		- <class:MIDI> realtime_running()
 
+	4. save MIDI File From MIDI Data
+		- <class:MIDI> save_midi_file(filePath)
+		- save_midi_file(midiPack, filePath)
 
-class MIDIInfo: # Read And Analyte MIDI Message 
 
-	def __init__(self, filePath):
+'''
 
-		self.midi_info = mido.MidiFile(filePath)
-		self.midi_tracks = self.midi_info.tracks[0]
 
+class MIDI :
 
-	def message_list(self, byte=False): # Get MIDI Message for List 
+	def __init__(self, tick=480, bpm=120, filePath=None):
 
-		midi_message_list = []
+		if filePath :
 
-		for midi_message in self.midi_info :
+			midiPack = read_midi_file(filePath)
 
-			if byte :
+		else :
 
-				midi_message_list.append(midi_message.bytes())
+			midiPack = []
 
-			elif not byte :
+		self.file_path = filePath
+		self.midi_pack = midiPack
+		self.tick = tick
+		self.bpm = bpm
 
-				midi_message_list.append(midi_message)
 
-		return midi_message_list
+	def get_input_port(self):
 
+		available_ports = midi_in.get_ports()
 
-	def meta_message_list(self, byte=False): # Get Header Message for List 
+		return available_ports
 
-		midi_message_list = []
 
-		for midi_message in self.midi_info :
+	def realtime_running(self, port=0, metronome=False):
 
-			if isinstance(midi_message, mido.MetaMessage):
+		first_received = False
 
-				if byte :
+		midi_in = rtmidi.MidiIn()
+		available_ports = midi_in.get_ports()
 
-					midi_message_list.append(midi_message.bytes())
+		if available_ports:
 
-				elif not byte :
+			self.midi_pack = receive_midi_realtime(port=port, bpm=self.bpm, metronome=metronome)
 
-					midi_message_list.append(midi_message)
+			return self.midi_pack
 
-		return midi_message_list
+		else:
+			print("No MIDI input ports found.")
 
 
-	def note_message_list(self, status=None, byte=False): # Get Only Note Message List ( note_on | note_off | None = Both )
+	def add_midi_data(self, midiData): # MIDI Data : [status, value, velocity, time]
 
-		midi_message_list = []
+		self.midi_pack.append(midiData)
 
-		for midi_message in self.midi_info :
+		return midiData
 
-			if status is not None :
+	def edit_midi_data(self, position, newMidiData):
 
-				if midi_message.type == status:
+		self.midi_pack[position] = newMidiData
 
-					if byte :
+		return newMidiData
 
-						midi_message_list.append(midi_message.bytes())
+	def save_midi_file(self, filePath):
 
-					elif not byte :
+		mido_pack = convert_midi_pack_to_mido_pack(self.midi_pack, bpm=self.bpm)
 
-						midi_message_list.append(midi_message)
+		mido_pack.save(filePath)
 
-			elif status is None :
+		return filePath
 
-				if midi_message.type == 'note_on' or midi_message.type == 'note_off':
 
-					if byte :
 
-						midi_message_list.append(midi_message.bytes())
+### Realtime #####################
 
-					elif not byte :
+def receive_midi_realtime(port=0, bpm=None, metronome=False):
 
-						midi_message_list.append(midi_message)
+	### !!! all receive note is note_on !!! ####
 
+	midi_pack = []
 
-		return midi_message_list
+	first_received = False
+	midi_in = rtmidi.MidiIn()
 
+	midi_in.open_port(port)
 
-	################ Function #########################################
+	print("MIDI Receive Running !!!")
 
+	if metronome is True :
 
-	def summary_note_name(self): # Summary 12 Note To JSON
+		metronome = Metronome(bpm=bpm)
+		metronome.start()
 
-		summary_note_name_json = list_to_json_count(NOTE_NAME_LIST)
+	start_timestamp = time.time() 
+	while True:
+				
+		rtmidi_message = midi_in.get_message()
 
-		message_note_on_list = self.note_message_list(status='note_on')
+		if rtmidi_message:
 
-		for message in message_note_on_list :
+			receive_timstamp = time.time()
+			midi_value = rtmidi_message[0]
 
-			note_name = NOTE_PER_12[message.note%12]
+			if first_received :
 
-			if note_name in summary_note_name_json :
+				midi_value.append(rtmidi_message[1])
 
-				summary_note_name_json[note_name] += 1
+			else :
 
-		return summary_note_name_json
+				first_note_time = receive_timstamp - start_timestamp
+				midi_value.append( first_note_time )
 
+				first_received = True
 
-class MIDIWrite : # Create MIDI Tracks Or Set And Use MidiSet To Save File
+			midi_pack.append(midi_value)
 
+			if midi_value[1] == 21 :
 
-	def __init__(self, Tracks=None): # If Have [ Mido ] Tracks Can Add To Tracks
+				metronome.stop()
 
-		self.midi_set = mido.MidiFile() 
+				break
 
-		if Tracks :
-			self.midi_tracks = Tracks
+			print(midi_value)
 
-		elif Tracks is None :
-			self.midi_tracks = mido.MidiTrack() 
+		time.sleep(0.01)
 
-	def add_message(self, status=None, note=None, control=None, velocity=None, value=None, time=None, message=None): 
+	print(midi_pack)
 
-		# Add Message To Mido Tracks 1. Add By Parameter 2. Add Mido Message ( message )
+	return midi_pack
 
-		if message is None :
 
-			if status and note and velocity and time :
+### Manage MIDI Micro Function #########
 
-				message = mido.Message(status, note=note, velocity=velocity, time=time)
 
-			elif control and value and time :
+def read_midi_file(filePath):
 
-				message = mido.Message('control_change', control=control, value=value, time=time)
+	mido_message_pack = mido.MidiFile(filePath, clip=True)
 
-			else:
+	midi_pack = convert_mido_pack_to_midi_pack(mido_message_pack)
 
-				return None
+	return midi_pack
 
-			self.midi_tracks.append(message)
 
-		elif message is not None :
+def save_midi_file(midiPack, filePath):
 
-			self.midi_tracks.append(message)
+	mido_pack = None
 
-		self.midi_set.tracks.append(self.midi_tracks)
+	if type(midiPack) == list :
 
-		return message
+		mido_pack = convert_midi_pack_to_mido_pack(midiPack)
 
+	elif type(midiPack) == mido.midifiles.midifiles.MidiFile :
 
-	def save_midi_file(self, path): # Save Midi Set To .mid Or midi. File
+		mido_pack = midiPack
 
-		self.midi_set.tracks.append(self.midi_tracks)
-		self.midi_set.save(path)
 
+	if mido_pack :
 
-class MIDIReceive: # Receive Midi Message From MIDIController Real-Time For Create File Or Analytic
+		mido_pack.save(filePath)
 
-	def __init__(self, portName=None, BPM=120) :
+		return f"sve file to {filePath} succesfull"
 
-		self.bpm = BPM
-		self.port_name = portName
-		self.input_port = mido.open_input(portName)
-		self.midi_set = mido.MidiFile()
-		self.midi_tracks = mido.MidiTrack()
+	else :
 
-	def get_input_port(self): # Gat All Input Midi Port
+		return "value is not match to save midi"
 
-		all_input_ports_name = mido.get_input_names()
 
-		return all_input_ports_name
 
-	def set_input_port(self, port_name): # Change Input Midi Port
+### Convert Function ########
 
-		self.port_name = port_name
-		self.input_port = mido.open_input(self.port_name)
 
-		return f' {self.port_name} connect ! '
+def convert_time_to_mido_format(time, bpm, tick=480):
 
-	def receive_running(self): # Receive Midi Real-Time
+	constant = ( tick *  bpm  ) / ( 60 )
+	mido_time = round(time*constant)
 
-		start_running_time = time.time()
+	return mido_time
 
-		try:
 
-			for message in self.input_port:
+def convert_midi_value_to_mido_message(midiValue, bpm=120, tick=480):
 
-				try :
-					if message.note == 21 :
-						break 
-				except :
-					pass
+	time = midiValue[-1]
+	midiValue.pop(-1)
 
-				byte_message = message.bytes()
+	try:
+		mido_message = mido.Message.from_bytes(midiValue)
+		mido_time = convert_time_to_mido_format(time, bpm, tick)
+		mido_message.time = mido_time 
+	except:
+		mido_message = None
 
-				current_time = time.time() 
-				elapsed_time = current_time - start_running_time 
+	return mido_message
 
-				message.time = int(elapsed_time*(self.bpm*10)) 
 
-				print("Message:", message)
+def convert_mido_message_to_midi_value(midoMessage):
 
-				self.midi_tracks.append(message)
+	midi_value = midoMessage.bytes()
+	midi_value.append(midoMessage.time)
 
-		except KeyboardInterrupt:
-			input_port.close()
+	return midi_value
 
-		return self.midi_tracks
 
-	def save_midi_file(self, path): # Save Midi Set To .mid Or midi. File
-		print('save')
-		print(self.midi_tracks)
-		self.midi_set.tracks.append(self.midi_tracks)
-		print(self.midi_set)
-		self.midi_set.save(path)
+def convert_midi_pack_to_mido_pack(midiPack, bpm=120, tick=480):
+
+	mido_pack = mido.MidiFile()
+	mido_track = mido.MidiTrack()
+
+	for midi_value in midiPack :
+
+		mido_message = convert_midi_value_to_mido_message(midi_value, bpm, tick)
+
+		if mido_message :
+
+			mido_track.append(mido_message)
+
+	mido_pack.tracks.append(mido_track)
+
+	return mido_pack
+
+
+def convert_mido_pack_to_midi_pack(midoPack):
+
+	midi_pack = []
+
+	for mido_message in midoPack :
+
+		midi_value = convert_mido_message_to_midi_value(mido_message)
+
+		midi_pack.append(midi_value)
+
+	return midi_pack
+
+
+
+
+	
+if __name__ == '__main__':
+
+	# print(read_midi_file("testset120.midi"))
+
+	midi = MIDI(bpm=100)
+
+	midi_pack = midi.realtime_running(metronome=True)
+	midi.save_midi_file("testset100.midi")
+
+	# print(convert_midi_pack_to_mido_pack(midi_pack))
+	# save_midi_file(midi_pack, 'cannon.mid')
+
+	# receive_midi_realtime()
+
+	# midi.add_midi_data([144,20,50,1])
+	# midi.add_midi_data([144,40,50,1])
+	# midi.add_midi_data([144,30,50,1])
+	# midi.add_midi_data([144,80,50,1])
+
+
+
+	# print(midi.midi_pack)
+
+	# midi.edit_midi_data(0,[0,0,0,0])
+
+	# print(midi.midi_pack)
+
+
 
 
